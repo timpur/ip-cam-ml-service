@@ -8,43 +8,48 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.WebUtilities;
 
-namespace IPCamMLService
+namespace IPCamMLService.Models
 {
     public class MJEPGImageSource : IImageSource, IDisposable
     {
         public string Name { get; }
         public string Source { get; }
+        public int FPS { get; }
 
         private HttpClient Client { get; }
-        private delegate void OnFrame(Bitmap frame);
-        private event OnFrame OnFrameEvent;
-        private Task ListeningTask;
-        private CancellationTokenSource ListeningTaskCancellationTokenSource = new CancellationTokenSource();
+        private Task StreamTask;
+        private Bitmap CurrentFrame;
+        private CancellationTokenSource StreamCancellation = new CancellationTokenSource();
 
-        public MJEPGImageSource(string name, string source)
+        public MJEPGImageSource(string name, string source, int fps)
         {
             Name = name;
             Source = source;
+            FPS = fps;
 
             Client = new HttpClient();
         }
 
-        public async IAsyncEnumerable<Bitmap> GetStream(string url)
+        public async IAsyncEnumerable<Bitmap> GetStream()
         {
-            if (ListeningTask == null) Start();
+            if (StreamTask == null) Start();
+            var delay = TimeSpan.FromSeconds(1) / FPS;
 
-            var queue = new Queue<Bitmap>();
-            OnFrame onFrame = (Bitmap image) => queue.Enqueue(image);
-            OnFrameEvent += onFrame;
+            while (!StreamTask.IsCompleted)
+            {
+                if (CurrentFrame != null) yield return CurrentFrame;
+                await Task.Delay(delay);
+            };
 
-
+            if (StreamTask.IsFaulted) throw StreamTask.Exception;
         }
 
         private void Start()
         {
-            ListeningTask = Task.Run(async () =>
+            StreamTask = Task.Run(async () =>
              {
                  using var result = await Client.GetAsync(Source, HttpCompletionOption.ResponseHeadersRead);
+                 result.EnsureSuccessStatusCode();
                  var content_type = result.Content.Headers.GetValues("Content-type").First();
                  var rx = new Regex(@"multipart/x-mixed-replace; boundary=""(.*)""");
                  var match = rx.Match(content_type);
@@ -53,18 +58,23 @@ namespace IPCamMLService
                      var boundary = match.Groups[1].Value;
                      var reader = new MultipartReader(boundary, await result.Content.ReadAsStreamAsync());
                      MultipartSection section;
-                     while ((section = await reader.ReadNextSectionAsync()) != null || !ListeningTaskCancellationTokenSource.IsCancellationRequested)
+                     while ((section = await reader.ReadNextSectionAsync()) != null || !StreamCancellation.IsCancellationRequested)
                      {
                          var image = new Bitmap(section.Body);
-                         OnFrameEvent.Invoke(image);
+                         CurrentFrame = image;
                      }
                  }
-             }, ListeningTaskCancellationTokenSource.Token);
+             }, StreamCancellation.Token);
+        }
+
+        private void Stop(){
+            StreamCancellation.Cancel();
+            StreamTask.IsCompletedSuccessfully
         }
 
         public void Dispose()
         {
-            ListeningTaskCancellationTokenSource.Cancel();
+            StreamCancellation.Cancel();
         }
     }
 }
