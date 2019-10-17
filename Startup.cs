@@ -10,8 +10,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Text.RegularExpressions;
 using System.IO;
+using Microsoft.AspNetCore.WebUtilities;
+using System.Text;
+using System.Drawing;
 
-namespace ip_cam_ml_service
+namespace IPCamMLService
 {
     public class Startup
     {
@@ -41,8 +44,27 @@ namespace ip_cam_ml_service
             });
         }
 
-
         async Task Test()
+        {
+            var client = new HttpClient();
+            var result = await client.GetAsync("http://202.90.241.79:82/cgi-bin/faststream.jpg?stream=half&fps=15&rand=COUNTER", HttpCompletionOption.ResponseHeadersRead);
+            var content_type = result.Content.Headers.GetValues("Content-type").First();
+            var rx = new Regex(@"multipart/x-mixed-replace; boundary=""(.*)""");
+            var match = rx.Match(content_type);
+            if (match != null)
+            {
+                var boundary = match.Groups[1].Value;
+                var reader = new MultipartReader(boundary, await result.Content.ReadAsStreamAsync());
+                MultipartSection section;
+                while ((section = await reader.ReadNextSectionAsync()) != null)
+                {
+                    var image = new Bitmap(section.Body);
+                }
+            }
+        }
+
+
+        async Task Test2()
         {
             var client = new HttpClient();
             var result = await client.GetAsync("http://202.90.241.79:82/cgi-bin/faststream.jpg?stream=half&fps=15&rand=COUNTER", HttpCompletionOption.ResponseHeadersRead);
@@ -64,7 +86,7 @@ namespace ip_cam_ml_service
                         // var size = await streamReader.ReadLineAsync();
                         // var empty = await streamReader.ReadLineAsync();
                         // var data = byte[]
-                        frame="";
+                        frame = "";
                     }
                     else
                     {

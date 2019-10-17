@@ -7,7 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace ip_cam_ml_service
+namespace IPCamMLService
 {
     public class Program
     {
