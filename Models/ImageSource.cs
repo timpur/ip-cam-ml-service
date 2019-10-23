@@ -1,9 +1,6 @@
 using System;
-using System.IO;
-using System.Linq;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging;
 
 namespace IPCamMLService.Models
 {
@@ -16,20 +13,6 @@ namespace IPCamMLService.Models
         public Frame(Bitmap image)
         {
             Image = image;
-        }
-
-        public byte[] GetImageAsBytes()
-        {
-            var codec = ImageCodecInfo.GetImageDecoders().First(x => x.MimeType == "image/jpeg");
-            var encoderParams = new EncoderParameters
-            {
-                Param = new EncoderParameter[]{
-                    new EncoderParameter(Encoder.Quality, 50L)
-                }
-            };
-            using var stream = new MemoryStream();
-            Image.Save(stream, codec, encoderParams);
-            return stream.GetBuffer();
         }
 
     }

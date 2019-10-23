@@ -64,20 +64,16 @@ namespace IPCamMLService.Models
                     {
                         using var result = await Client.GetAsync(Source, HttpCompletionOption.ResponseHeadersRead);
                         result.EnsureSuccessStatusCode();
-                        var content_type = result.Content.Headers.GetValues("Content-type").First();
-                        var rx = new Regex(@"multipart/x-mixed-replace; boundary=""(.*)""");
-                        var match = rx.Match(content_type);
-                        if (match != null)
+                        var contentType = result.Content.Headers.GetValues("Content-type").First();
+                        var boundary = GetBoundary(contentType);
+                        var reader = new MultipartReader(boundary, await result.Content.ReadAsStreamAsync());
+                        MultipartSection section;
+                        while ((section = await reader.ReadNextSectionAsync()) != null && !StreamCancellation.IsCancellationRequested)
                         {
-                            var boundary = match.Groups[1].Value;
-                            var reader = new MultipartReader(boundary, await result.Content.ReadAsStreamAsync());
-                            MultipartSection section;
-                            while ((section = await reader.ReadNextSectionAsync()) != null && !StreamCancellation.IsCancellationRequested)
-                            {
-                                var image = new Bitmap(section.Body);
-                                CurrentFrame = new Frame(image);
-                            }
+                            var image = new Bitmap(section.Body);
+                            CurrentFrame = new Frame(image);
                         }
+
                     }, StreamCancellation.Token);
                 }
             }
@@ -99,6 +95,18 @@ namespace IPCamMLService.Models
         public void Dispose()
         {
             StreamCancellation.Cancel();
+        }
+
+
+        private string GetBoundary(string contentType)
+        {
+            var match = new Regex(@"multipart/x-mixed-replace; boundary=""(.*)""").Match(contentType);
+            if (match != null)
+            {
+                return match.Groups[1].Value;
+            }
+
+            throw new Exception("Boundary Not Found.");
         }
     }
 }

@@ -1,15 +1,15 @@
 using System;
+using System.Linq;
 using System.IO;
 using System.Text;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using IPCamMLService.Models;
-
+using System.Net.Http.Headers;
 
 namespace IPCamMLService.Controllers
 {
@@ -19,54 +19,60 @@ namespace IPCamMLService.Controllers
     {
         IImageSource Source = new IPCamMLService.Models.MJPEGImageSource("Cam1", "http://202.90.241.79:82/cgi-bin/faststream.jpg?stream=half&fps=15&rand=COUNTER", 15);
 
-        // [HttpGet()]
-        // public async Task<Stream> Get()
-        // {
-        //     var source = new IPCamMLService.Models.MJEPGImageSource("Cam1", "http://202.90.241.79:82/cgi-bin/faststream.jpg?stream=half&fps=15&rand=COUNTER", 15);
-        //     var result = new MultipartContent("x-mixed-replace", "test-test");
-
-        //     Task.Run(async () =>
-        //     {
-        //         await foreach (var frame in source.GetStream())
-        //         {
-        //             var stream = new MemoryStream();
-        //             frame.Image.Save(stream, ImageFormat.Jpeg);
-        //             stream.Position = 0;
-        //             var content = new StreamContent(stream);
-        //             result.Add(content);
-        //         }
-        //     });
-
-        //     await Task.Delay(1000);
-        //     Response.ContentType = result.Headers.ContentType.ToString();
-        //     return await result.ReadAsStreamAsync();
-        // }
-
         [HttpGet]
-        public async Task Get()
+        public MultipartResult Get()
         {
-            Response.ContentType = "multipart/x-mixed-replace; boundary=\"ml-image\"";
-            await Response.StartAsync();
-            var t = 0;
-            await foreach (var frame in Source.GetStream())
+            return new MultipartResult(Source.GetStream().Select(frame =>
             {
-                if (HttpContext.RequestAborted.IsCancellationRequested) break;
-
-                t += 1;
-                if (t == 2) break;
-
-                var stream = new MemoryStream();
-                frame.Image.Save(stream, ImageFormat.Jpeg);
-                stream.Position = 0;
-                var content = new StreamContent(stream);
+                var content = new ByteArrayContent(GetImageAsBytes(frame.Image));
                 content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+                return content;
+            }));
+        }
 
-                await Response.Body.WriteAsync(Encoding.UTF8.GetBytes("--ml-image" + "\n"));
-                await Response.Body.WriteAsync(Encoding.UTF8.GetBytes(content.Headers.ToString() + "\n"));
-                await content.CopyToAsync(Response.Body);
-                var test = Encoding.UTF8.GetString(frame.GetImageAsBytes());
-                await Response.Body.WriteAsync(Encoding.UTF8.GetBytes("\n"));
-                await Response.Body.FlushAsync();
+        private byte[] GetImageAsBytes(Bitmap Image, int quality = 100)
+        {
+            var codec = ImageCodecInfo.GetImageDecoders().First(x => x.MimeType == "image/jpeg");
+            var encoderParams = new EncoderParameters
+            {
+                Param = new EncoderParameter[]{
+                    new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)quality)
+                }
+            };
+            using var stream = new MemoryStream();
+            Image.Save(stream, codec, encoderParams);
+            Console.WriteLine($"2: {stream.Length}");
+            return stream.GetBuffer();
+        }
+    }
+
+    public class MultipartResult : IActionResult
+    {
+        public IAsyncEnumerable<HttpContent> ContentParts { get; }
+        public string Boundary { get; }
+
+        public MultipartResult(IAsyncEnumerable<HttpContent> contentParts, string boundary = "multipart-boundary")
+        {
+            ContentParts = contentParts;
+            Boundary = boundary;
+        }
+
+        public async Task ExecuteResultAsync(ActionContext context)
+        {
+            var Response = context.HttpContext.Response;
+
+            Response.ContentType = $"multipart/x-mixed-replace; boundary=\"${Boundary}\"";
+            await Response.StartAsync();
+
+            await foreach (var content in ContentParts)
+            {
+                if (context.HttpContext.RequestAborted.IsCancellationRequested) break;
+
+                await Response.BodyWriter.WriteAsync(Encoding.UTF8.GetBytes($"--${Boundary}\n"));
+                await Response.BodyWriter.WriteAsync(Encoding.UTF8.GetBytes(content.Headers.ToString() + "\n"));
+                await Response.BodyWriter.WriteAsync(await content.ReadAsByteArrayAsync());
+                await Response.BodyWriter.WriteAsync(Encoding.UTF8.GetBytes("\n"));
+                await Response.BodyWriter.FlushAsync();
             }
         }
     }

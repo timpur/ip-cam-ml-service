@@ -17,8 +17,6 @@ namespace IPCamMLService.Models
     {
         Bitmap Image { get; }
         IList<IDetectedObject> DetectedObjects { get; }
-
-        byte[] GetImageAsBytes();
     }
 
     public interface IDetectedObject
