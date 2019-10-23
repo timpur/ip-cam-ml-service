@@ -10,6 +10,26 @@ namespace IPCamMLService.Models
         string Source { get; }
         int FPS { get; }
 
-        IAsyncEnumerable<Bitmap> GetStream();
+        IAsyncEnumerable<IFrame> GetStream();
+    }
+
+    public interface IFrame
+    {
+        Bitmap Image { get; }
+        IList<IDetectedObject> DetectedObjects { get; }
+
+        byte[] GetImageAsBytes();
+    }
+
+    public interface IDetectedObject
+    {
+        Rectangle Box { get; }
+        IList<IClassification> Classifications { get; }
+    }
+
+    public interface IClassification
+    {
+        string Label { get; }
+        float Probability { get; }
     }
 }
