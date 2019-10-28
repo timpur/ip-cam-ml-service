@@ -20,7 +20,7 @@ namespace IPCamMLService.Models
     public class DetectedObject : IDetectedObject
     {
         public Rectangle Box { get; }
-        public IList<IClassification> Classifications { get; } = new List<IClassification>();
+        public IDictionary<string, IClassification> Classifications { get; } = new Dictionary<string, IClassification>();
 
         public DetectedObject(Rectangle box)
         {

@@ -7,8 +7,9 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.WebUtilities;
+using IPCamMLService.Models;
 
-namespace IPCamMLService.Models
+namespace IPCamMLService.ImageSource
 {
     public class MJPEGImageSource : IImageSource, IDisposable
     {
@@ -38,6 +39,8 @@ namespace IPCamMLService.Models
             {
                 Start();
                 var delay = TimeSpan.FromSeconds(1) / FPS;
+
+                // TODO: FPS delay max is rate of source or less
 
                 while (!StreamTask.IsCompleted)
                 {

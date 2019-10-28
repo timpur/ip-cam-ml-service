@@ -22,7 +22,7 @@ namespace IPCamMLService.Models
     public interface IDetectedObject
     {
         Rectangle Box { get; }
-        IList<IClassification> Classifications { get; }
+        IDictionary<string, IClassification> Classifications { get; }
     }
 
     public interface IClassification
